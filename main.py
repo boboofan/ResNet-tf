@@ -6,6 +6,9 @@ from dataset_processing import image_resizing
 from dataset_processing import get_dataset
 from tqdm import tqdm
 
+# tensorboard --logdir=D:/360data/重要数据/桌面/tf/logs
+# http://localhost:6006
+
 
 def generator(X, Y, batch_size, height, width):
     data_size = len(X)
