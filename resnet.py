@@ -136,9 +136,7 @@ class ResidualAttentionNet:
 
         # H(x) = (1 + M(x)) ∗ F(x)
         attention_weight = tf.add(tf.ones_like(mask_branch), mask_branch)
-        multiply = tf.multiply(attention_weight, trunk_branch)
-
-        return tf.add(trunk_branch, multiply)
+        return tf.multiply(attention_weight, trunk_branch)
 
     def output(self, inputs, training):  # [None,224,224,3]
         with tf.name_scope('layer_1'):  # [None,112,112,64]
