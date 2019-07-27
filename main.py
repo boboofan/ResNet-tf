@@ -67,9 +67,11 @@ def main():
         tf.summary.scalar('mean_cross_entropy_loss', loss)
 
     with tf.name_scope('accuracy'):
-        accuracy = tf.metrics.accuracy(labels, tf.argmax(tf.nn.softmax(outputs), axis=-1, output_type=tf.int32))[1]
-        tf.summary.scalar('accuracy', accuracy)
-
+        train_accuracy = tf.metrics.accuracy(labels, tf.argmax(tf.nn.softmax(outputs), axis=-1, output_type=tf.int32))[1]
+        tf.summary.scalar('train_accuracy', train_accuracy)
+        test_accuracy = tf.metrics.accuracy(labels, tf.argmax(tf.nn.softmax(outputs), axis=-1, output_type=tf.int32))[1]
+        tf.summary.scalar('test_accuracy', test_accuracy)
+        
     train_step = tf.train.GradientDescentOptimizer(learning_rate).minimize(loss, global_step=global_step)
 
     saver = tf.train.Saver()
@@ -95,7 +97,7 @@ def main():
                 xs, ys = next(train_iter)
 
                 _, loss_val, acc_val, lr, mer, steps = sess.run(
-                    [train_step, loss, accuracy, learning_rate, merged, global_step],
+                    [train_step, loss, train_accuracy, learning_rate, merged, global_step],
                     feed_dict={inputs: xs, labels: ys, training: True})
 
                 print('after %d steps, loss is %g, accuracy is %g, lr is %g' % (j, loss_val, acc_val, lr))
@@ -109,7 +111,7 @@ def main():
         for i in tqdm(range(int(test_size / test_batch_size))):
             xs, ys = next(test_iter)
 
-            acc_val = sess.run(accuracy, feed_dict={inputs: xs, labels: ys, training: False})
+            acc_val = sess.run(test_accuracy, feed_dict={inputs: xs, labels: ys, training: False})
             print('after %d steps, accuracy is %g' % (i, acc_val))
 
 
