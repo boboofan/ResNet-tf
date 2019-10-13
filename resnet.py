@@ -77,7 +77,7 @@ class ResidualAttentionNet:
                                 kernel_size=kernel_size,
                                 strides=strides,
                                 padding=padding,
-                                kernel_regularizer=tf.contrib.layers.l2_regularizer(self.regularizer))
+                                kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))
 
     def res_unit(self, inputs, output_dim, strides, training):
         input_dim = inputs.get_shape().as_list()[-1]
@@ -100,7 +100,7 @@ class ResidualAttentionNet:
 
         return tf.add(shortcut, relu2)
 
-    def mask_res_unit(self, inputs, training):
+    def attention_res_unit(self, inputs, training):
         input_dim = inputs.get_shape().as_list()[-1]
 
         bn1 = tf.layers.batch_normalization(inputs, training=training)
@@ -113,32 +113,52 @@ class ResidualAttentionNet:
 
         return tf.add(inputs, conv2)
 
-    def attention_module(self, inputs, n, training):
+    def attention_module(self, inputs, n, training, p=1, t=2, r=1):
         input_dim = inputs.get_shape().as_list()[-1]
 
+        head = inputs
+        for i in range(p):
+            head = self.attention_res_unit(head, training=training)
+
         # trunk branch
-        trunk_branch = self.res_unit(inputs, input_dim, 1, training)
-        trunk_branch = self.res_unit(trunk_branch, input_dim, 1, training)
+        trunk_branch = head
+        for i in range(t):
+            trunk_branch = self.attention_res_unit(trunk_branch, training)
 
         # mask branch
-        mask_branch = inputs
+        mask_branch = head
+        res_list = []
 
         for i in range(n):
             mask_branch = tf.layers.max_pooling2d(mask_branch, 2, 2, 'same')
-            mask_branch = self.mask_res_unit(mask_branch, training)
+            for j in range(r):
+                mask_branch = self.attention_res_unit(mask_branch, training)
+            if i < n - 1:
+                res_list.append(self.attention_res_unit(mask_branch, training))
 
         for i in range(n):
-            mask_branch = self.mask_res_unit(mask_branch, training)
+            for j in range(r):
+                mask_branch = self.attention_res_unit(mask_branch, training)
             shape = mask_branch.get_shape().as_list()
             mask_branch = tf.image.resize_bilinear(mask_branch, [shape[1] * 2, shape[2] * 2])
+            if i < n - 1:
+                mask_branch = tf.add(mask_branch, res_list.pop())
 
+        mask_branch = self.conv(mask_branch, input_dim, kernel_size=1)
+        mask_branch = tf.layers.batch_normalization(mask_branch, training=training)
+        mask_branch = tf.nn.relu(mask_branch)
+        mask_branch = self.conv(mask_branch, input_dim, kernel_size=1)
+        mask_branch = tf.layers.batch_normalization(mask_branch, training=training)
         mask_branch = tf.nn.sigmoid(mask_branch)
 
         # H(x) = (1 + M(x)) ∗ F(x)
-        attention_weight = tf.add(tf.ones_like(mask_branch), mask_branch)
-        return tf.multiply(attention_weight, trunk_branch)
+        rear = tf.multiply(tf.add(tf.ones_like(mask_branch), mask_branch), trunk_branch)
+        for i in range(p):
+            rear = self.attention_res_unit(rear, training=training)
 
-    def output(self, inputs, training):  # [None,224,224,3]
+        return rear
+
+    def build_network(self, inputs, training):  # [None,224,224,3]
         with tf.name_scope('layer_1'):  # [None,112,112,64]
             conv = self.conv(inputs, 64, 7, 2)
             bn = tf.layers.batch_normalization(conv, training=training)
@@ -161,13 +181,9 @@ class ResidualAttentionNet:
             res4 = self.res_unit(att3, 512, 2, training)
             res5 = self.res_unit(res4, 512, 1, training)
 
-        with tf.name_scope('layer_6'):  # [None,1,1,512]
-            avg_pool = tf.layers.average_pooling2d(res5, 7, 1, 'same')
-
         with tf.name_scope('fc'):
-            flatten = tf.layers.flatten(avg_pool)
-            fc = tf.layers.dense(flatten,
-                                 units=1000,
-                                 activation=tf.nn.relu,
-                                 kernel_regularizer=tf.contrib.layers.l2_regularizer(self.regularizer))
-            return tf.layers.dense(fc,self.class_num)
+            gap = tf.reduce_mean(res5, axis=[1, 2])
+            fc = tf.layers.dense(gap, units=1000, activation=tf.nn.relu,
+                                 kernel_regularizer=tf.keras.regularizers.l2(self.regularizer))
+
+        return tf.layers.dense(fc, self.class_num)
