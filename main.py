@@ -15,14 +15,15 @@ from resnet import ResidualAttentionNet
 def get_dataset(data_path, train_size=0.8):
     img_paths, labels = [], []
 
+    p=[]
     types = os.listdir(data_path)
     for i in range(len(types)):
         path = os.path.join(data_path, types[i])
         names = os.listdir(path)
         for name in names:
-            img_paths.append(os.path.join(path, name))
-            labels.append(i)
-
+            if name.endswith(('.JPG', '.jpg', '.png', 'jpeg')):
+                img_paths.append(os.path.join(path, name))
+                labels.append(i)
     return train_test_split(img_paths, labels, train_size=train_size, random_state=1124)
 
 
@@ -68,11 +69,13 @@ def main():
     train_steps_each_epoch = int(np.ceil(train_size / train_batch_size))
     test_steps = int(np.ceil(test_size / test_batch_size))
     data_path = 'D:/360data/重要数据/桌面/项目/病虫害/raw/color'
+    #data_path = 'Z:/Users/boboo/项目/病虫害/raw/color'
     model_save_path = './model_saving/'
     model_name = 'resattnet'
     log_path = './logs'
 
     train_x, test_x, train_y, test_y = get_dataset(data_path)
+    print(len(train_y),len(test_y))
 
     train_iter = generator(train_x, train_y, train_batch_size, True)
     test_iter = generator(test_x, test_y, test_batch_size, False)
