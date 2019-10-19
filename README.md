@@ -1,1 +1,1 @@
-# ResNet-tf
+# Residual Attention Network
